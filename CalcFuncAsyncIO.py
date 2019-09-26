@@ -9,6 +9,8 @@ import os.path
 import datetime
 import _thread as thread
 import asyncio
+#import mysql.connector
+
 def getConnection():
     connection = pymysql.connect(host='localhost',
                                  user='root',
@@ -18,11 +20,13 @@ def getConnection():
                                  cursorclass=DictCursor)
     return connection
 
+
+
 def check_login(login):
     with closing (getConnection()) as connection:
         with connection.cursor() as cursor:
-            query = 'SELECT * from users1 where login = \'{}\''.format(login)
-            cursor.execute(query)
+            query = "SELECT `id` from `users1` where `login`=%s"
+            cursor.execute(query, (login,))
             for row in cursor:
                 return True
             return False
@@ -30,8 +34,10 @@ def check_login(login):
 def check_pass(login, password):
     with closing (getConnection()) as connection:
         with connection.cursor() as cursor:
-            query = 'SELECT password from users1 where login = \'{}\''.format(login)
-            cursor.execute(query)
+            #query = 'SELECT password from users1 where login = \'{}\''.format(login)
+            #cursor.execute(query)
+            query = "SELECT `password` from `users1` where `login`=%s"
+            cursor.execute(query, (login,))
             for row in cursor:
                 if row['password'] == password : return True
                 else: return False
@@ -39,16 +45,20 @@ def check_pass(login, password):
 def check_balance(login):
     with closing (getConnection()) as connection:
         with connection.cursor() as cursor:
-            query = 'SELECT balance from users1 where login = \'{}\''.format(login)
-            cursor.execute(query)
+           # query = 'SELECT balance from users1 where login = \'{}\''.format(login)
+           # cursor.execute(query)
+            query = "SELECT `balance` from `users1` where `login`=%s"
+            cursor.execute(query, (login,))
             for row in cursor:
                 return row['balance']
             
 def reduce_balance(login):
     with closing (getConnection()) as connection:
         with connection.cursor() as cursor:
-            query = 'UPDATE users1 set balance = balance - 1 where login = \'{}\''.format(login)
-            cursor.execute(query)
+            #query = 'UPDATE users1 set balance = balance - 1 where login = \'{}\''.format(login)
+            #cursor.execute(query)
+            query = "UPDATE `users1` SET `balance` = `balance` - 1  where `login`=%s"
+            cursor.execute(query, (login,))
             connection.commit()
             return
         
