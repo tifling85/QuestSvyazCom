@@ -1,6 +1,4 @@
-
-from CalcFuncAsyncIO import *
-
+from CalcFuncAsyncIODB import *
 
 mutex = thread.allocate_lock()
 
@@ -13,25 +11,21 @@ async def handleClient(reader, writer):
         print('Timeout on!')
         task = asyncio.create_task(conn_timeout(writer))
     while True:
-        #len_message = int((await reader.readline()).decode('utf-8'))
-        #message = (await reader.read(1024)).decode('utf-8')
         message = ((await reader.readline()).decode('utf-8')).rstrip()
         if writer.is_closing(): break
-        #print(len_message)
-        #message = (await reader.readexactly(len_message)).decode('utf-8')
         print('Recieve from {}: {}'.format(login, message))
         if re.findall('login .+', message):
-            login = await try_auth(message.split(' ')[1], reader, writer)
+            login = await try_auth(message.split(' ')[1:], reader, writer)
             if login != 'Empty':
                 task.cancel()
         elif re.findall('logout', message):
             login, task = await try_logout(login, reader, writer)
         elif re.findall('calc .+', message) and login != 'Empty':
             calc_list = await check_calc(message[5:], login, reader, writer)
-            print('calc_list= ', calc_list)
+            #print('calc_list= ', calc_list)
             if not calc_list: continue
             stack_rpn = await sort_facility(calc_list, reader, writer)
-            print('stack_rpn= ', stack_rpn)
+            #print('stack_rpn= ', stack_rpn)
             if not stack_rpn: continue
             result = round(await rpn_on_stack(stack_rpn, login, reader, writer), 2)
             if not result and result != 0: continue

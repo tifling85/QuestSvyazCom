@@ -9,73 +9,63 @@ import os.path
 import datetime
 import _thread as thread
 import asyncio
-#import mysql.connector
+import aiomysql
 
-def getConnection():
-    connection = pymysql.connect(host='localhost',
+
+async def getConnection():
+    connection = await aiomysql.connect(host='localhost',
                                  user='root',
                                  password='qwerty',                             
-                                 db='TestSvyaz',
-                                 charset='utf8mb4',
-                                 cursorclass=DictCursor)
+                                 db='TestSvyaz')
     return connection
 
-
-
-def check_login(login):
-    with closing (getConnection()) as connection:
-        with connection.cursor() as cursor:
-            query = "SELECT `id` from `users1` where `login`=%s"
-            cursor.execute(query, (login,))
-            for row in cursor:
-                return True
+async def check_login(login):  
+    with closing (await getConnection()) as connection:
+        async with connection.cursor() as cursor:
+            print("SELECT `id` FROM `users1` WHERE `login`='{}'".format(login))
+            await cursor.execute("SELECT `id` FROM `users1` WHERE `login`=%s", (login,))
+            r = await cursor.fetchall()
+            if not r: return False
+#            print(r)
+            if r[0][0]: return True
             return False
 
-def check_pass(login, password):
-    with closing (getConnection()) as connection:
-        with connection.cursor() as cursor:
-            #query = 'SELECT password from users1 where login = \'{}\''.format(login)
-            #cursor.execute(query)
-            query = "SELECT `password` from `users1` where `login`=%s"
-            cursor.execute(query, (login,))
-            for row in cursor:
-                if row['password'] == password : return True
-                else: return False
+async def check_pass(login, password):
+    with closing (await getConnection()) as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute("SELECT `password` from `users1` where `login`=%s", (login,))
+            r = await cursor.fetchone()
+#            print(r[0])
+            if r[0] == password: return True
+            return False
 
-def check_balance(login):
-    with closing (getConnection()) as connection:
-        with connection.cursor() as cursor:
-           # query = 'SELECT balance from users1 where login = \'{}\''.format(login)
-           # cursor.execute(query)
-            query = "SELECT `balance` from `users1` where `login`=%s"
-            cursor.execute(query, (login,))
-            for row in cursor:
-                return row['balance']
+async def check_balance(login):
+    with closing (await getConnection()) as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute("SELECT `balance` from `users1` where `login`=%s", (login,))
+            r = await cursor.fetchone()
+#            print(r[0])
+            return r[0]
             
-def reduce_balance(login):
-    with closing (getConnection()) as connection:
-        with connection.cursor() as cursor:
-            #query = 'UPDATE users1 set balance = balance - 1 where login = \'{}\''.format(login)
-            #cursor.execute(query)
-            query = "UPDATE `users1` SET `balance` = `balance` - 1  where `login`=%s"
-            cursor.execute(query, (login,))
-            connection.commit()
+async def reduce_balance(login):
+    with closing (await getConnection()) as connection:
+        async with connection.cursor() as cursor:
+            await cursor.execute("UPDATE `users1` SET `balance` = `balance` - 1  where `login`=%s", (login,))
+            await connection.commit()
             return
         
 async def try_auth(login, reader, writer):
-    if check_login(login):
+    login = ' '.join(login)
+    if await check_login(login):
         writer.write('login correct. input password:'.encode('utf-8'))
         await writer.drain()
-        
-        #data = (await reader.read(1024)).decode('utf-8')
-        #len_message = int((await reader.read(1024)).decode('utf-8'))
         data = ((await reader.readline()).decode('utf-8')).rstrip()
-        if check_pass(login, data):
+        if await check_pass(login, data):
             writer.write('authentication success!'.encode('utf-8'))
             await writer.drain()
             print('user ' + login + ' is logged')
             print('Timeout off!')
-            print(check_balance(login))
+            print(await check_balance(login))
             return login
         else:
             writer.write('authentication failed!'.encode('utf-8'))
@@ -99,9 +89,8 @@ async def try_logout(login, reader, writer):
     return ('Empty', task)
 
 async def check_calc(data, login, reader, writer):
-    print(data)
-    #if not re.findall(r'^[\d+\+*/()-]+$', data):
-    if check_balance(login) == 0:
+#    print(data)
+    if await check_balance(login) < 1:
         writer.write('Balance is NULL!'.encode('utf-8'))
         await writer.drain()
         return False
@@ -111,7 +100,6 @@ async def check_calc(data, login, reader, writer):
         writer.write('Incorrect data!'.encode('utf-8'))
         await writer.drain()
         return False
-    #return re.findall('(\d+|[\+*/()-])', data)
     return re.findall('([0-9]+[.,]?[0-9]*|[\+*/()-])', data)
 
 async def sort_facility(data, reader, writer):
@@ -135,8 +123,8 @@ async def sort_facility(data, reader, writer):
             stack.pop()
         else:
             outstr.append(float(token))
-        print(outstr)
-        print(stack)
+#        print(outstr)
+#        print(stack)
 
     for token in stack[::-1]:
         outstr.append(token)
@@ -151,7 +139,7 @@ async def rpn_on_stack(data, login, reader, writer):
     operators = {'+': operator.add, '-': operator.sub, '*': operator.mul, '/': operator.truediv}
     stack = [0]
     for token in data:
-        print(token)
+#        print(token)
         if token in operators:
             oprnd2, oprnd1 = stack.pop(), stack.pop()
             print('token is {}, oprnd2 is {}'.format(token, oprnd2))
@@ -159,14 +147,14 @@ async def rpn_on_stack(data, login, reader, writer):
                 conn.send('Result is: DivizionByZero!!!'.encode('utf-8'))
                 return False
             stack.append(operators[token](oprnd1,oprnd2))
-            print(stack)
+#            print(stack)
         elif token or token == 0.0:
             stack.append(float(token))
-            print(stack)
+#            print(stack)
     writer.write('Result is: {0}'.format(stack[-1]).encode('utf-8'))
     await writer.drain()
-    reduce_balance(login)
-    print(check_balance(login))
+    await reduce_balance(login)
+    print(await check_balance(login))
     return stack.pop()
 
 def write_to_log(login, request, result):
